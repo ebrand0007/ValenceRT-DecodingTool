@@ -3,7 +3,9 @@ import libscrc
 import sys
 import time
 
-sPort = 'COM4'
+debug=0
+
+sPort = '/dev/ttyUSB0'
 req_init = "000300fc0000842b"
 
 req_ids_loop = ["ff4306064246", "ff4306064246", "ff5006003381",
@@ -38,7 +40,7 @@ s = serial.Serial(
     timeout=0.005
 )
 
-s.rs485_mode = serial.rs485.RS485Settings(True, False, False, None, None)
+#s.rs485_mode = serial.rs485.RS485Settings(True, False, False, None, None)
 
 s.write(bytes.fromhex(req_init))
 time.sleep(0.001)
@@ -67,32 +69,36 @@ def evaluate_battery_status():
     t6 = cc[6]
     print("SOC: ", str(soc), "%")
     print("I1: ", str(current1), "A")
-    print("I2: ", str(current2), "A (sometimes much (20-33%) lower then I1 and measured charging current. why? maybe reduced by the loss of the balancer? seems to happen with higher charging currents, same with 2A, and with I1 -4.969 I2 was -3.399A)")
     print("Ubat: ", str(voltage_bat), "V")
     print("P: ", str(p_bat), "W")
     print("U1: ", str(voltage_1), "V")
     print("U2: ", str(voltage_2), "V")
     print("U3: ", str(voltage_3), "V")
     print("U4: ", str(voltage_4), "V")
-    print("U5: ", str(voltage_5), "V")  # very close to U5
-    print("U6: ", str(voltage_6), "V")  # very close to U1
+    if (debug==1):
+        print("U5: ", str(voltage_5), "V")  # very close to U5
+        print("U6: ", str(voltage_6), "V")  # very close to U1
     print("T1: ", str(t1), "C")
     print("T2: ", str(t2), "C")
     print("T3 (PCB): ", str(t3), "C")
     print("T4 (PCB): ", str(t4), "C")
     print("T5: ", str(t5), "C")
     print("T6: ", str(t6), "C")
+    if (debug==1):
+        print("I2: ", str(current2), "A (sometimes much (20-33%) lower then I1 and measured charging current. why? maybe reduced by the loss of the balancer? seems to happen with higher charging currents, same with 2A, and with I1 -4.969 I2 was -3.399A)")
     #  print("Charge cycles: ", str(charge_cycle), "maybe, could be something else")
 
 
 for i in range(0, 2):
     for req in req_ids_loop:
-        print("->", req)
+        if (debug==1):
+            print("->", req)
         s.write(bytes.fromhex(req))
         time.sleep(0.03)
         cc = s.readline()
         if len(cc) > 0:
-            print("<-", cc.hex())
+            if (debug==1):
+              print("<-", cc.hex())
             if cc.hex().startswith("ff70"):
                 # received id from battery
                 bat_id = cc[3:15]
@@ -106,7 +112,9 @@ for i in range(0, 2):
                 bat_ids.append(current_bat_id)
                 current_bat_id += 1
                 req = req + libscrc.modbus(req).to_bytes(2, 'little')
-                print("-> ", req.hex(), "# received battery id", bat_id_hex,
+                
+                if (debug==1):
+                    print("-> ", req.hex(), "# received battery id", bat_id_hex,
                       "assigning bus id", current_bat_id - 1)
                 s.write(req)
                 time.sleep(0.035)
@@ -119,14 +127,16 @@ for i in range(0, 2):
 for reqid in bat_ids:
     req = bytes([reqid]) + req_data
     req = req + libscrc.modbus(req).to_bytes(2, 'little')
-    print("->", req.hex(), "# request data from bus id", reqid)
+    if (debug==1):
+        print("->", req.hex(), "# request data from bus id", reqid)
     s.write(req)
     time.sleep(0.03)
     cc = s.readline()
     for i in range(0, 2):
         cc += s.readline()
 
-    print("<-", cc.hex(), "# battery data")
+    if (debug==1):
+        print("<-", cc.hex(), "# battery data")
     if len(cc) >= 58:
         evaluate_battery_status()
 
