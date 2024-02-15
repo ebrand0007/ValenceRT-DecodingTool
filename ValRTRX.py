@@ -2,10 +2,11 @@ import serial.rs485
 import libscrc
 import sys
 import time
+import argparse
 
-debug=0
-
+debug=False #set to true to enable debugging
 sPort = '/dev/ttyUSB0'
+
 req_init = "000300fc0000842b"
 
 req_ids_loop = ["ff4306064246", "ff4306064246", "ff5006003381",
@@ -27,12 +28,20 @@ def sHEX(hexstr):
     return hexstr
 
 
-if len(sys.argv) == 2:
-    sPort = sys.argv[1]
+parser=argparse.ArgumentParser()
+parser.add_argument('-d',action="store_true",help="enable debugging")
+parser.add_argument('-port',help="serial port (default /dev/ttyUSB0)",default="/dev/ttyUSB0")
+parser.add_argument('-baud',help="serial baud rate (default 115200",default=115200)
+
+
+args=parser.parse_args()
+debug=args.d
+sPort=args.port
+baud=args.baud
 
 s = serial.Serial(
     port=sPort,
-    baudrate=115200,
+    baudrate=baud,
     # parity=serial.PARITY_MARK,
     parity=serial.PARITY_NONE,
     stopbits=serial.STOPBITS_ONE,
@@ -48,7 +57,7 @@ s.write(bytes.fromhex(req_init))
 time.sleep(0.001)
 
 
-def evaluate_battery_status():
+def evaluate_battery_status(batteryNum):
     soc = cc[43] / 255 * 100
     current1 = sHEX((cc[24] * 256) + cc[23]) / 1000
     current2 = sHEX((cc[28] * 256) + cc[27]) / 1000
@@ -60,14 +69,16 @@ def evaluate_battery_status():
     voltage_4 = sHEX((cc[56] * 256) + cc[55]) / 1000
     voltage_5 = sHEX((cc[32] * 256) + cc[31]) / 1000  # same as v4
     voltage_6 = sHEX((cc[34] * 256) + cc[33]) / 1000  # same as v1
-    # charge_cycle = sHEX((cc[14] * 256) + cc[13])  # maybe it is
+    charge_cycle = sHEX((cc[14] * 256) + cc[13])  # maybe it is
     t1 = cc[3]
     t2 = cc[5]
     t3 = cc[17]
     t4 = cc[18]
     t5 = cc[4]
     t6 = cc[6]
-    print("SOC: ", str(soc), "%")
+    print("BatteryNumber: ", batteryNum)
+    #print("SOC: ", str(soc), "%")
+    print("Bat_%s_SOC:%s%%" %  (batteryNum, str(soc)) )
     print("I1: ", str(current1), "A")
     print("Ubat: ", str(voltage_bat), "V")
     print("P: ", str(p_bat), "W")
@@ -86,10 +97,10 @@ def evaluate_battery_status():
     print("T6: ", str(t6), "C")
     if (debug==1):
         print("I2: ", str(current2), "A (sometimes much (20-33%) lower then I1 and measured charging current. why? maybe reduced by the loss of the balancer? seems to happen with higher charging currents, same with 2A, and with I1 -4.969 I2 was -3.399A)")
-    #  print("Charge cycles: ", str(charge_cycle), "maybe, could be something else")
+    print("Charge cycles: ", str(charge_cycle), "maybe, could be something else")
 
 
-for i in range(0, 2):
+for i in range(0, 2): 
     for req in req_ids_loop:
         if (debug==1):
             print("->", req)
@@ -124,7 +135,9 @@ for i in range(0, 2):
                 evaluate_battery_status()
 
 
+batteryCount=0
 for reqid in bat_ids:
+    batteryCount=batteryCount+1
     req = bytes([reqid]) + req_data
     req = req + libscrc.modbus(req).to_bytes(2, 'little')
     if (debug==1):
@@ -138,6 +151,6 @@ for reqid in bat_ids:
     if (debug==1):
         print("<-", cc.hex(), "# battery data")
     if len(cc) >= 58:
-        evaluate_battery_status()
+        evaluate_battery_status(batteryCount)
 
 s.close()
